@@ -1,0 +1,336 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  firstName       String
+  lastName        String
+  role            UserRole  @default(user)
+  isEmailVerified Boolean   @default(false)
+  verificationToken String?
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  lastLogin       DateTime?
+  stripeCustomerId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  locations       Location[]
+  teamMembers     TeamMember[]
+  subscription    Subscription?
+  sessions        Session[]
+}
+
+model Location {
+  id              String    @id @default(cuid())
+  name            String
+  placeId         String    @unique
+  address         String
+  latitude        Float
+  longitude       Float
+  phone           String?
+  website         String?
+  timezone        String
+  primaryCategory String
+  categories      String[]
+  settings        LocationSettings?
+  users           User[]
+  teamMembers     TeamMember[]
+  reviews         Review[]
+  posts           Post[]
+  keywords        Keyword[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model LocationSettings {
+  id                  String    @id @default(cuid())
+  locationId          String    @unique
+  notifyOnReviews     Boolean   @default(true)
+  notifyOnRankChanges Boolean   @default(true)
+  autoApproveResponses Boolean   @default(false)
+  reviewAlertThreshold Int      @default(3)
+  rankingAlertThreshold Int     @default(5)
+  location            Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model TeamMember {
+  id              String    @id @default(cuid())
+  userId          String
+  locationId      String
+  role            TeamRole
+  permissions     Json
+  user            User      @relation(fields: [userId], references: [id])
+  location        Location  @relation(fields: [locationId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, locationId])
+}
+
+model Review {
+  id              String    @id @default(cuid())
+  locationId      String
+  googleReviewId  String    @unique
+  author          String
+  authorPhotoUrl  String?
+  rating          Int
+  text            String
+  status          ReviewStatus @default(active)
+  isVerified      Boolean   @default(false)
+  publishedAt     DateTime
+  response        ReviewResponse?
+  sentiment       ReviewSentiment?
+  location        Location  @relation(fields: [locationId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ReviewResponse {
+  id              String    @id @default(cuid())
+  reviewId        String    @unique
+  text            String
+  status          ResponseStatus @default(pending)
+  authorId        String
+  publishedAt     DateTime?
+  review          Review    @relation(fields: [reviewId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ReviewSentiment {
+  id              String    @id @default(cuid())
+  reviewId        String    @unique
+  score           Float
+  magnitude       Float
+  topics          String[]
+  keywords        String[]
+  review          Review    @relation(fields: [reviewId], references: [id])
+}
+
+model Post {
+  id              String    @id @default(cuid())
+  locationId      String
+  title           String
+  content         String
+  status          PostStatus
+  platforms       Platform[]
+  schedule        DateTime?
+  authorId        String
+  approverId      String?
+  publishedAt     DateTime?
+  media           PostMedia[]
+  metrics         PostMetrics[]
+  location        Location  @relation(fields: [locationId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PostMedia {
+  id              String    @id @default(cuid())
+  postId          String
+  type            MediaType
+  url             String
+  key             String
+  contentType     String
+  metadata        Json
+  post            Post      @relation(fields: [postId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PostMetrics {
+  id              String    @id @default(cuid())
+  postId          String
+  platform        Platform
+  views           Int       @default(0)
+  likes           Int       @default(0)
+  shares          Int       @default(0)
+  comments        Int       @default(0)
+  post            Post      @relation(fields: [postId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Keyword {
+  id              String    @id @default(cuid())
+  locationId      String
+  term            String
+  gridSize        String    @default("3x3")
+  radius          Float
+  unit            DistanceUnit
+  rankings        Ranking[]
+  competitors     CompetitorRanking[]
+  location        Location  @relation(fields: [locationId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([locationId, term])
+}
+
+model Ranking {
+  id              String    @id @default(cuid())
+  keywordId       String
+  rank            Int
+  previousRank    Int?
+  avgAGR          Float
+  ATGR            Float
+  SoLV            Float
+  date            DateTime
+  keyword         Keyword   @relation(fields: [keywordId], references: [id])
+}
+
+model CompetitorRanking {
+  id              String    @id @default(cuid())
+  keywordId       String
+  placeId         String
+  name            String
+  rank            Int
+  previousRank    Int?
+  date            DateTime
+  keyword         Keyword   @relation(fields: [keywordId], references: [id])
+}
+
+model Subscription {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  plan                Plan
+  status              SubscriptionStatus
+  stripeSubscriptionId String?
+  currentPeriodStart  DateTime
+  currentPeriodEnd    DateTime
+  cancelAtPeriodEnd   Boolean   @default(false)
+  quantity            Int       @default(1)
+  user                User      @relation(fields: [userId], references: [id])
+  usage               Usage[]
+  invoices            Invoice[]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Usage {
+  id              String    @id @default(cuid())
+  subscriptionId  String
+  feature         Feature
+  used           Int       @default(0)
+  limit          Int
+  period         String    // YYYY-MM format
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([subscriptionId, feature, period])
+}
+
+model Invoice {
+  id                  String    @id @default(cuid())
+  subscriptionId      String
+  stripeInvoiceId     String    @unique
+  amount              Int
+  currency            String
+  status              InvoiceStatus
+  dueDate             DateTime
+  paidAt              DateTime?
+  items               Json
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Session {
+  id              String    @id @default(cuid())
+  userId          String
+  token           String    @unique
+  expiresAt       DateTime
+  user            User      @relation(fields: [userId], references: [id])
+  createdAt       DateTime  @default(now())
+}
+
+enum UserRole {
+  admin
+  editor
+  viewer
+  user
+}
+
+enum TeamRole {
+  admin
+  editor
+  viewer
+}
+
+enum ReviewStatus {
+  active
+  flagged
+  resolved
+  deleted
+}
+
+enum ResponseStatus {
+  pending
+  approved
+  rejected
+  published
+}
+
+enum PostStatus {
+  draft
+  pending
+  scheduled
+  published
+  rejected
+  archived
+}
+
+enum Platform {
+  google
+  facebook
+  instagram
+  wordpress
+}
+
+enum MediaType {
+  image
+  video
+}
+
+enum DistanceUnit {
+  km
+  mi
+}
+
+enum Plan {
+  free
+  starter
+  professional
+  enterprise
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  trialing
+}
+
+enum InvoiceStatus {
+  draft
+  open
+  paid
+  void
+  uncollectible
+}
+
+enum Feature {
+  locations
+  keywords
+  posts
+  users
+}
