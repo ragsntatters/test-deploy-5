@@ -1,20 +1,17 @@
-FROM node:18-alpine
-
+FROM node:18-alpine as builder
 WORKDIR /app
-
-# Install dependencies
 COPY package*.json ./
 RUN npm ci --only=production
-
-# Copy application files
-COPY dist/ dist/
+COPY . .
+RUN npm run build
+# Build a runtime image
+FROM node:18-alpine
+WORKDIR /app
+COPY --from=builder /app/dist /app/dist
 COPY prisma/ prisma/
-
-# Generate Prisma client
-RUN npx prisma generate
-
+# Install dependencies
+RUN npm install
 # Expose port
 EXPOSE 3001
-
-# Start application
-CMD ["node", "dist/index.js"]
+# Start the application
+CMD ["npm", "start"]
